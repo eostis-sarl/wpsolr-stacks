@@ -1,0 +1,42 @@
+services:
+  weaviate:
+    image: semitechnologies/weaviate:latest
+    container_name: weaviate
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "50051:50051" # gRPC
+    environment:
+      AUTOSCHEMA_ENABLED: 'false' # Important to add custom WPSOLR data types
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "false"
+      AUTHENTICATION_APIKEY_ENABLED: "true"
+      AUTHENTICATION_APIKEY_ALLOWED_KEYS: ${WEAVIATE_API_KEY}
+      AUTHENTICATION_APIKEY_USERS: wpsolr
+      AUTHORIZATION_ADMINLIST_ENABLED: "true"
+      AUTHORIZATION_ADMINLIST_USERS: wpsolr
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: "text2vec-transformers"
+      ENABLE_MODULES: "text2vec-transformers"
+      CLUSTER_HOSTNAME: "node1"
+      TRANSFORMERS_INFERENCE_API: 'http://t2v-transformers:8080'
+    volumes:
+      - weaviate-data:/var/lib/weaviate
+    networks:
+      - weaviate-net
+
+  t2v-transformers:
+    image: cr.weaviate.io/semitechnologies/transformers-inference:sentence-transformers-paraphrase-multilingual-MiniLM-L12-v2
+    container_name: text2vec-transformers
+    restart: unless-stopped
+    environment:
+      ENABLE_CUDA: "0"
+    networks:
+      - weaviate-net
+
+volumes:
+  weaviate-data:
+
+networks:
+  weaviate-net:
+    driver: bridge

@@ -1,0 +1,122 @@
+##################################################################################################################
+# services
+##################################################################################################################
+
+services:
+  pgdb:
+    container_name: postgresql # hostname in WPSOLR config
+    image: timescale/timescaledb-ha:pg18-oss
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: wpsolr # create database 'wpsolr' if not initialized yet
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - wpsolr-bridge
+
+  pgadmin4:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8080:80"
+    depends_on:
+      - pgdb
+    networks:
+      - wpsolr-bridge
+
+  pgai:
+    image: timescale/pgai-vectorizer-worker:latest
+    depends_on:
+      - pgdb
+    environment:
+      PGAI_VECTORIZER_WORKER_DB_URL: postgres://postgres:postgres@pgdb:5432/wpsolr
+      PGAI_VECTORIZER_WORKER_POLL_INTERVAL: "5s"  # <--- Check every 5 seconds to embed changed rows with Ollama's embedding model
+
+      # OpenAI (api key required, no url required, text-embedding-3-small, 1536)
+      OPENAI_API_KEY: "sk-xyz"
+
+      # Cohere (api key required, no url required, embed-english-v3.0, 1024)
+      COHERE_API_KEY: "abc"
+
+      # vLLM (api key required, http://vllm_server:8000/v1, nnomic-ai/nomic-embed-text-v1.5, 768)
+      VLLM_API_KEY: "my-vllm-api-key"
+
+      # Infinity (api key required, http://infinity_server:7997/v1, nomic-ai/nomic-embed-text-v1.5, 768)
+      INFINITY_API_KEY: "my-infinity-api-key"
+
+      # Ollama (no api key, http://ollama:11434, nomic-embed-text, 768)
+    networks:
+      - wpsolr-bridge
+
+  pgai-init:
+    image: timescale/pgai-vectorizer-worker:latest
+    depends_on:
+      - pgdb
+    entrypoint: >
+      bash -c "
+        python -m pgai install -d $$PGAI_VECTORIZER_WORKER_DB_URL
+      "
+    environment:
+      PGAI_VECTORIZER_WORKER_DB_URL: postgres://postgres:postgres@pgdb:5432/wpsolr
+    networks:
+      - wpsolr-bridge
+
+  ollama:
+    container_name: ollama
+    image: ollama/ollama
+    networks:
+      - wpsolr-bridge
+
+#  vllm:
+#    image: ${WPSOLR_IMAGE_NAME}:vllm-openai
+#    # This is the official CPU image (Linux x86 only)
+#    # Does not work on older hardware not providing AVX2 instruction, like MacBook Pro 2019
+#    container_name: vllm_server
+#    # SHARED MEMORY IS CRITICAL
+#    # vLLM crashes on CPU if it runs out of shared memory.
+#    # 'host' gives it unlimited access to your RAM.
+#    shm_size: '4gb'
+#    environment:
+#      # FORCE CPU MODE
+#      - VLLM_TARGET_DEVICE=cpu
+#
+#      # CPU PERFORMANCE TUNING (Prevents crashes)
+#      # Reserve 4GB for the KV cache (adjust depending on your RAM)
+#      - VLLM_CPU_KVCACHE_SPACE=4
+#      # Force it to bind to generic threads if AVX detection fails
+#      - VLLM_CPU_OMP_THREADS_BIND=all
+#    # We must explicitly load a small, CPU-friendly model
+#    command: >
+#      --model nomic-ai/nomic-embed-text-v1.5
+#      --device cpu
+#      --dtype float32
+#      --max-model-len 2048
+#      --enforce-eager
+#      --api-key my-vllm-api-key
+#    networks:
+#      - wpsolr-bridge
+
+#  infinity:
+#    image: ${WPSOLR_IMAGE_NAME}:infinity
+#    container_name: infinity_server
+#    # Infinity uses arguments for the model and key
+#    command: "v2 --model-id nomic-ai/nomic-embed-text-v1.5 --api-key my-infinity-api-key"
+#    ports:
+#      - "7997:7997"
+#    environment:
+#      DO_NOT_TRACK: 1
+#    networks:
+#      - wpsolr-bridge
+
+networks:
+  wpsolr-bridge:
+    driver: bridge
+
+volumes:
+  pgdata:

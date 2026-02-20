@@ -1,0 +1,38 @@
+services:
+  opensearch:
+    image: opensearchproject/opensearch:latest
+    container_name: opensearch
+    environment:
+      - plugins.ml_commons.model_auto_redeploy.enable=true
+      - plugins.ml_commons.only_run_on_ml_node=false
+      - discovery.type=single-node
+      - plugins.security.disabled=true   # security disabled
+      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=StrongPassword123!  # required by OpenSearch
+    ports:
+      - "9200:9200"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    networks:
+      - wpsolr-net
+
+  opensearch-dashboards:
+    build: .
+    container_name: opensearch-dashboards
+    environment:
+      - OPENSEARCH_HOSTS=http://opensearch:9200
+      - SERVER_HOST=0.0.0.0
+      - OPENSEARCH_USERNAME=admin
+    ports:
+      - "5601:5601"
+    depends_on:
+      - opensearch
+    networks:
+      - wpsolr-net
+
+volumes:
+  opensearch-data:
+
+networks:
+  wpsolr-net:
+    driver: bridge

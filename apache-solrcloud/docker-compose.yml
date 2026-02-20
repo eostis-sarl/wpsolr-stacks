@@ -1,0 +1,47 @@
+services:
+  solr-cloud:
+    image: solr:latest
+    container_name: solr-cloud
+    ports:
+      - "8983:8983"
+    environment:
+      - ZK_HOST=solr_zoo:2191
+    depends_on:
+      - solr-cloud-zoo
+    volumes:
+      - solr-data:/var/solr
+      - ./security.json:/var/solr/data/security.json # Default credentials: solr/SolrRocks
+    user: root # run as root to change the permissions of the solr folder
+    command: >
+      bash -c "
+      chown -R 8983:8983 /var/solr && \
+      su -s /bin/bash solr -c 'bin/solr zk cp -z solr_zoo:2191 file:/var/solr/data/security.json zk:/security.json' && \
+      exec solr-foreground -force"
+    networks:
+      - solr-net
+
+  solr-cloud-zoo:
+    image: zookeeper:latest
+    container_name: solr_zoo
+    restart: always
+    hostname: solr_zoo
+    ports:
+      - 2191:2191
+      - 7011:7000
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=solr_zoo:2888:3888;2191
+      ZOO_4LW_COMMANDS_WHITELIST: mntr, conf, ruok
+      ZOO_CFG_EXTRA: "metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider metricsProvider.httpPort=7000 metricsProvider.exportJvmInfo=true"
+    volumes:
+      - zookeeper-data:/data
+    networks:
+      - solr-net
+
+volumes:
+  solr-data:
+  zookeeper-data:
+
+networks:
+  solr-net:
+    driver: bridge
